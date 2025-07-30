@@ -100,17 +100,21 @@ async def get_or_create_conversation(
         except ValueError:
             raise HTTPException(400, f"Conversation {conversation_id} not found")
 
+        # Verify conversation exists, user owns it, and map belongs to same project
         conversation = await conn.fetchrow(
             """
-            SELECT id, project_id, owner_uuid, title, created_at, updated_at, soft_deleted_at
-            FROM conversations
-            WHERE id = $1 AND owner_uuid = $2 AND soft_deleted_at IS NULL
+            SELECT c.id, c.project_id, c.owner_uuid, c.title, c.created_at, c.updated_at, c.soft_deleted_at
+            FROM conversations c
+            JOIN user_mundiai_maps m ON c.project_id = m.project_id
+            WHERE c.id = $1 AND c.owner_uuid = $2 AND c.soft_deleted_at IS NULL
+              AND m.id = $3 AND m.owner_uuid = $2 AND m.soft_deleted_at IS NULL
             """,
             conversation_id_int,
             user_id,
+            map_id,
         )
         if not conversation:
-            raise HTTPException(404, f"Conversation {conversation_id} not found")
+            raise HTTPException(404, f"Conversation {conversation_id} or map {map_id} not found")
 
         return Conversation(
             id=conversation["id"],
