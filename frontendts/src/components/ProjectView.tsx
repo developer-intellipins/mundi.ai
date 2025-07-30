@@ -73,6 +73,19 @@ export default function ProjectView() {
         (res) => res.json() as Promise<MapTreeResponse>,
       ),
     enabled: !!versionId,
+    placeholderData: (previousData) => {
+      if (!previousData) return undefined;
+      // mapTree being null/undefined makes the version visualization flicker, so
+      // delete the conversation-related stuff from the tree, and use that as our
+      // placeholder
+      return {
+        ...previousData,
+        tree: previousData.tree.map((node) => ({
+          ...node,
+          messages: [], // conversation messages
+        })),
+      };
+    },
   });
 
   const { data: roomId } = useQuery({
