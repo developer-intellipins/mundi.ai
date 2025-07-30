@@ -1042,8 +1042,7 @@ async def get_map_style_internal(
             style_json["sources"][layer_id] = {
                 "type": "vector",
                 "tiles": [
-                    # f"{os.getenv('WEBSITE_DOMAIN')}/api/layer/{layer_id}/{{z}}/{{x}}/{{y}}.mvt"
-                    f"http://localhost:5173/api/layer/{layer_id}/{{z}}/{{x}}/{{y}}.mvt"
+                    f"{os.getenv('WEBSITE_DOMAIN')}/api/layer/{layer_id}/{{z}}/{{x}}/{{y}}.mvt"
                 ],
                 "minzoom": 0,
                 "maxzoom": 17,
