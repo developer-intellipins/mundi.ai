@@ -13,6 +13,7 @@ import { Map as MLMap } from 'maplibre-gl';
 import { toast } from 'sonner';
 import type { ErrorEntry, UploadingFile } from '../lib/frontend-types';
 import type { Conversation, EphemeralAction, MapProject, MapTreeResponse } from '../lib/types';
+import { usePersistedState } from '../lib/usePersistedState';
 
 export default function ProjectView() {
   const navigate = useNavigate();
@@ -20,6 +21,9 @@ export default function ProjectView() {
   const sessionContext = Session.useSessionContext();
 
   const { projectId, versionIdParam } = useParams();
+  if (!projectId) {
+    throw new Error('No project ID');
+  }
 
   // State for controlling project query refetch interval
   const [projectRefetchInterval, setProjectRefetchInterval] = useState<number | false>(false);
@@ -38,7 +42,7 @@ export default function ProjectView() {
     setProjectRefetchInterval(hasLoadingConnections ? 4000 : false);
   }, [project?.postgres_connections]);
 
-  const [conversationId, setConversationId] = useState<number | null>(null);
+  const [conversationId, setConversationId] = usePersistedState<number | null>('conversationId', [projectId], null);
   const { data: conversations } = useQuery({
     queryKey: ['project', projectId, 'conversations'],
     queryFn: () => fetch(`/api/conversations?project_id=${projectId}`).then((res) => res.json() as Promise<Conversation[]>),
