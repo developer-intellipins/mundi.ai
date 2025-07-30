@@ -99,13 +99,13 @@ WORKDIR /app
 
 # Install legacy libraries for MapLibre compatibility
 RUN dpkgArch="$(dpkg --print-architecture)" && \
-    wget -qO /tmp/multiarch.deb \
+    wget -O /tmp/multiarch.deb \
       http://snapshot.debian.org/archive/debian/20190501T215844Z/pool/main/g/glibc/multiarch-support_2.28-10_${dpkgArch}.deb && \
-    wget -qO /tmp/libjpeg8.deb \
+    wget -O /tmp/libjpeg8.deb \
       http://snapshot.debian.org/archive/debian/20141009T042436Z/pool/main/libj/libjpeg8/libjpeg8_8d1-2_${dpkgArch}.deb && \
-    wget -qO /tmp/libicu70.deb \
-      http://archive.ubuntu.com/ubuntu/pool/main/i/icu/libicu70_70.1-2ubuntu1_${dpkgArch}.deb && \
-    wget -qO /tmp/libpng.deb \
+    wget -O /tmp/libicu70.deb \
+      https://snapshot.debian.org/archive/debian/20211231T204524Z/pool/main/i/icu/libicu70_70.1-2_${dpkgArch}.deb && \
+    wget -O /tmp/libpng.deb \
       http://ftp.debian.org/debian/pool/main/libp/libpng1.6/libpng16-16_1.6.37-3_${dpkgArch}.deb && \
     apt-get purge -y libpng-dev && \
     apt-get update && \
@@ -137,5 +137,8 @@ ENV DISPLAY=:99 \
     LANG=en_US.UTF-8 \
     PYTHONPATH="/app:/usr/lib/python3/dist-packages" \
     LD_LIBRARY_PATH=/usr/lib
+
+EXPOSE 5678
+EXPOSE 8000
 
 CMD ["python", "-m", "src.wsgi"]

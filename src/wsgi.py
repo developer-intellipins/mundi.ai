@@ -26,6 +26,15 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi_proxy_lib.fastapi.app import reverse_http_app, reverse_ws_app
 import httpx
 
+import debugpy
+
+debugpy.listen(("0.0.0.0", 5678))
+print("Waiting for debugger attach...", flush=True)
+debugpy.wait_for_client()  # Optional: Only if you want to pause until debugger attaches
+
+# ...rest of your application code...
+
+
 from src.routes import (
     postgres_routes,
     project_routes,

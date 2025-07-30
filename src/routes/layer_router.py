@@ -808,9 +808,9 @@ Shape__Area and Shape__Length are generally useless unless the user asks for the
 </Columns>
 
 <ResponseFormat>
-Begin IMMEDIATELY with SQL.
+Begin IMMEDIATELY with SQL command.
 NEVER preface or suffix with English.
-NEVER use ` or ``` to begin the SQL.
+NEVER use ` or ``` or ```sql to begin or end the SQL.
 NEVER add comments like #, --, //, or /*.
 
 Use newlines to wrap text at 80 characters and use tabs to indent semantically.

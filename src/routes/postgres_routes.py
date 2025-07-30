@@ -1227,8 +1227,9 @@ async def internal_upload_layer(
             file_size_bytes = len(content)
             # Write to temp file
             temp_file.write(content)
+            temp_file.flush()
+            
             temp_file_path = temp_file.name
-
             # If this is a ZIP file, process it for shapefiles and convert to GeoPackage
             temp_dir = None
             if file_ext.lower() == ".zip":
