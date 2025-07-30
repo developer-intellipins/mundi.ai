@@ -45,7 +45,7 @@ export function AppSidebar({ projects }: { projects: ProjectState }) {
   }
 
   return (
-    <Sidebar collapsible="icon" data-theme="light">
+    <Sidebar collapsible="icon" data-theme="light" className="border-none">
       <SidebarHeader className="flex flex-col items-center p-4">
         {state === 'collapsed' ? (
           <>
