@@ -190,73 +190,25 @@ class ChatCompletionMessageRow(BaseModel):
     created_at: str
 
 
-class MessagesListResponse(BaseModel):
-    map_id: str
-    messages: List[SanitizedMessage]
-
-
-@router.get(
-    "/{map_id}/messages",
-    response_model=MessagesListResponse,
-    operation_id="get_map_messages",
-)
-async def get_map_messages(
-    request: Request,
-    map_id: str,
-    session: UserContext = Depends(verify_session_required),
-):
-    all_messages: list[MundiChatCompletionMessage] = await get_all_map_messages(
-        map_id, session
-    )
-
-    # Filter for messages with role "user" or "assistant" and no tool_calls
-    sanitized_messages: list[SanitizedMessage] = []
-    for cc_message in all_messages:
-        if cc_message.message_json["role"] in ["tool", "system"]:
-            continue
-        sanitized_messages.append(convert_mundi_message_to_sanitized(cc_message))
-
-    return {
-        "map_id": map_id,
-        "messages": sanitized_messages,
-    }
-
-
-async def get_all_map_messages(
-    map_id: str,
+async def get_all_conversation_messages(
+    conversation_id: int,
     session: UserContext,
 ) -> List[MundiChatCompletionMessage]:
-    async with async_conn("get_all_map_messages") as conn:
-        map_result = await conn.fetchrow(
-            """
-            SELECT id, owner_uuid
-            FROM user_mundiai_maps
-            WHERE id = $1 AND soft_deleted_at IS NULL
-            """,
-            map_id,
-        )
-
-        if not map_result:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Map not found"
-            )
-
-        if session.get_user_id() != str(map_result["owner_uuid"]):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication required",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
+    async with async_conn("get_all_conversation_messages") as conn:
         db_messages = await conn.fetch(
             """
-            SELECT *
-            FROM chat_completion_messages
-            WHERE map_id = $1
-            ORDER BY created_at ASC
+            SELECT ccm.*
+            FROM chat_completion_messages ccm
+            JOIN conversations c ON ccm.conversation_id = c.id
+            WHERE ccm.conversation_id = $1
+            AND c.owner_uuid = $2
+            AND c.soft_deleted_at IS NULL
+            ORDER BY ccm.created_at ASC
             """,
-            map_id,
+            conversation_id,
+            session.get_user_id(),
         )
+
         messages: list[MundiChatCompletionMessage] = []
         for msg in db_messages:
             msg_dict = dict(msg)
@@ -724,8 +676,8 @@ async def process_chat_interaction_task(
 
                 # Refresh messages to include any new system messages we just added
                 with tracer.start_as_current_span("kue.fetch_messages"):
-                    updated_messages_response = await get_all_map_messages(
-                        map_id, session
+                    updated_messages_response = await get_all_conversation_messages(
+                        conversation.id, session
                     )
 
                 openai_messages = [
@@ -1043,7 +995,6 @@ async def process_chat_interaction_task(
                                 "error.traceback", traceback.format_exc()
                             )
                             break
-
                 assistant_message: ChatCompletionMessageParam = response.choices[
                     0
                 ].message
@@ -1996,7 +1947,7 @@ async def send_map_message(
     redis.set(lock_key, "locked", ex=30)  # 30 second expiry
 
     # Use map state provider to generate system messages
-    messages_response = await get_all_map_messages(map_id, session)
+    messages_response = await get_all_conversation_messages(conversation.id, session)
     current_messages = [msg.message_json for msg in messages_response]
 
     current_map_description = await get_map_description(
