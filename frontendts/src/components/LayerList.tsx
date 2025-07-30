@@ -206,27 +206,15 @@ const LayerList: React.FC<LayerListProps> = ({
     if (currentMapData.diff && currentMapData.diff.layer_diffs) {
       const layerDiffMap = new globalThis.Map<string, string>(currentMapData.diff.layer_diffs.map((diff) => [diff.layer_id, diff.status]));
 
-      // Start with current layers
-      const layersWithStatus = currentLayersArray.map((layer) => ({
-        ...layer,
-        status: (layerDiffMap.get(layer.id) || 'existing') as 'added' | 'removed' | 'edited' | 'existing',
-      }));
+      // Start with current layers and filter out removed ones
+      const layersWithStatus = currentLayersArray
+        .map((layer) => ({
+          ...layer,
+          status: (layerDiffMap.get(layer.id) || 'existing') as 'added' | 'removed' | 'edited' | 'existing',
+        }))
+        .filter((layer) => layer.status !== 'removed');
 
-      // Add removed layers from diff
-      const removedLayers = currentMapData.diff.layer_diffs
-        .filter((diff) => diff.status === 'removed')
-        .filter((diff) => !currentLayersArray.some((layer) => layer.id === diff.layer_id))
-        .map((diff) => ({
-          id: diff.layer_id,
-          name: diff.name,
-          path: '',
-          // geometry_type: null,
-          type: 'removed',
-          // feature_count: null,
-          status: 'removed' as const,
-        }));
-
-      return [...layersWithStatus, ...removedLayers];
+      return layersWithStatus;
     }
 
     // If no diff, all layers are existing
