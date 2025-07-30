@@ -632,30 +632,30 @@ const LayerList: React.FC<LayerListProps> = ({
         </div>
         <div className="flex items-center gap-1">
           <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger>
-                <DropdownMenu>
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
                   <DropdownMenuTrigger asChild>
                     <Button size="sm" variant="ghost" className="p-0.5 hover:cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600">
                       <Plus className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={openDropzone} className="cursor-pointer">
-                      <Upload className="h-4 w-4 mr-2" />
-                      Upload file
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setShowRemoteUrlDialog(true)} className="cursor-pointer">
-                      <Link className="h-4 w-4 mr-2" />
-                      Add remote URL
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Add layer source</p>
-              </TooltipContent>
-            </Tooltip>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Add layer source</p>
+                </TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={openDropzone} className="cursor-pointer">
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload file
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setShowRemoteUrlDialog(true)} className="cursor-pointer">
+                  <Link className="h-4 w-4 mr-2" />
+                  Add remote URL
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </TooltipProvider>
           <TooltipProvider>
             <Tooltip>
