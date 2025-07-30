@@ -45,6 +45,7 @@ from openai.types.chat.chat_completion_message_param import (
     ChatCompletionMessageParam,
 )
 from openai.types.chat import ChatCompletionMessageToolCallParam
+from openai import APIError
 
 from src.symbology.llm import generate_maplibre_layers_for_layer_id
 from src.structures import (
@@ -1012,10 +1013,28 @@ async def process_chat_interaction_task(
                                 tools=tools_payload if tools_payload else None,
                                 tool_choice="auto" if tools_payload else None,
                             )
+                        except APIError as e:
+                            if e.code == "context_length_exceeded":
+                                await kue_notify_error(
+                                    conversation.id,
+                                    "Maximum context length for LLM has been reached. Please create a new chat to continue using the chat feature.",
+                                )
+                            else:
+                                await kue_notify_error(
+                                    conversation.id,
+                                    "Error connecting to LLM. If trying again doesn't work, create a new chat in the top right to reset the chat history.",
+                                )
+                            span.set_status(
+                                trace.Status(trace.StatusCode.ERROR, str(e))
+                            )
+                            span.set_attribute(
+                                "error.traceback", traceback.format_exc()
+                            )
+                            break
                         except Exception as e:
                             await kue_notify_error(
                                 conversation.id,
-                                "Error connecting to LLM. If trying again doesn't work, create a new chat in the top right to reset the chat history.",
+                                "Error connecting to LLM. This is probably a bug with Mundi, please open a new issue on GitHub.",
                             )
                             span.set_status(
                                 trace.Status(trace.StatusCode.ERROR, str(e))
@@ -1966,7 +1985,6 @@ async def send_map_message(
     user_id = session.get_user_id()
 
     # Check if map is already being processed
-    print("checking lock", conversation.id)
     lock_key = f"chat_lock:{conversation.id}"
     if redis.get(lock_key):
         raise HTTPException(
@@ -1975,7 +1993,6 @@ async def send_map_message(
         )
 
     # Lock the conversation for processing
-    print("setting lock", conversation.id)
     redis.set(lock_key, "locked", ex=30)  # 30 second expiry
 
     # Use map state provider to generate system messages
