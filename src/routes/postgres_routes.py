@@ -34,11 +34,9 @@ from ..dependencies.session import (
     verify_session_optional,
     UserContext,
 )
-from ..utils import get_openai_client
 from typing import List, Optional
 import logging
 from pathlib import Path
-import difflib
 from datetime import datetime
 from pyproj import Transformer
 from osgeo import osr
@@ -63,7 +61,6 @@ from ..structures import get_async_db_connection, async_conn
 from ..dependencies.base_map import BaseMapProvider, get_base_map_provider
 from ..dependencies.postgis import get_postgis_provider
 from ..dependencies.layer_describer import LayerDescriber, get_layer_describer
-from ..dependencies.chat_completions import ChatArgsProvider, get_chat_args_provider
 from ..dependencies.postgres_connection import (
     PostgresConnectionManager,
     get_postgres_connection_manager,
@@ -249,144 +246,6 @@ async def create_map(
             created_on=result["created_on"].isoformat(),
             last_edited=result["last_edited"].isoformat(),
         )
-
-
-class ForkResponse(BaseModel):
-    map_id: str
-    project_id: str
-
-
-@router.post(
-    "/{map_id}/save_fork", response_model=ForkResponse, operation_id="save_and_fork_map"
-)
-async def save_and_fork_map(
-    request: Request,
-    map_id: str,
-    session: UserContext = Depends(verify_session_required),
-    postgis_provider: Callable = Depends(get_postgis_provider),
-    layer_describer: LayerDescriber = Depends(get_layer_describer),
-    chat_args: ChatArgsProvider = Depends(get_chat_args_provider),
-    connection_manager: PostgresConnectionManager = Depends(
-        get_postgres_connection_manager
-    ),
-):
-    """
-    Create a fork of an existing map with a new map ID.
-    The new map is added to the project's list of maps.
-    """
-    owner_id = session.get_user_id()
-
-    async with get_async_db_connection() as conn:
-        # Check if source map exists and user has access
-        source_map = await conn.fetchrow(
-            """
-            SELECT m.id, m.project_id, m.title, m.description, p.link_accessible, m.owner_uuid, m.layers
-            FROM user_mundiai_maps m
-            JOIN user_mundiai_projects p ON m.project_id = p.id
-            WHERE m.id = $1 AND m.soft_deleted_at IS NULL
-            """,
-            map_id,
-        )
-
-        if not source_map:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Source map not found"
-            )
-
-        # Check access permissions
-        if not source_map["link_accessible"] and owner_id != str(
-            source_map["owner_uuid"]
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to fork this map",
-            )
-
-        # Get the project's current maps to find the previous map for diff
-        project = await conn.fetchrow(
-            """
-            SELECT maps
-            FROM user_mundiai_projects
-            WHERE id = $1 AND soft_deleted_at IS NULL
-            """,
-            source_map["project_id"],
-        )
-        proj_maps = project["maps"] or [] if project else []
-
-        # Find the previous map for diff calculation
-        prev_map_id = None
-        try:
-            current_index = proj_maps.index(map_id)
-            if current_index > 0:
-                prev_map_id = proj_maps[current_index - 1]
-        except ValueError:
-            pass  # map_id not found in project maps
-
-        # Generate new map ID
-        new_map_id = generate_id(prefix="M")
-
-        # Create new map as a copy of the source map, including layers
-        await conn.fetchrow(
-            """
-            INSERT INTO user_mundiai_maps
-            (id, project_id, owner_uuid, title, description, layers, display_as_diff, parent_map_id, fork_reason)
-            VALUES ($1, $2, $3, $4, $5, $6, TRUE, $7, $8)
-            RETURNING id, title, description, created_on, last_edited
-            """,
-            new_map_id,
-            source_map["project_id"],
-            owner_id,
-            source_map["title"],
-            source_map["description"],
-            source_map["layers"],
-            map_id,
-            "user_edit",
-        )
-
-        # Copy over all map_layer_styles to the new map
-        if source_map["layers"]:
-            await conn.execute(
-                """
-                INSERT INTO map_layer_styles (map_id, layer_id, style_id)
-                SELECT $1, layer_id, style_id
-                FROM map_layer_styles
-                WHERE map_id = $2
-                """,
-                new_map_id,
-                map_id,
-            )
-
-        # Get a summary of the changes from the previous map to the source map
-        diff_summary = {"diff_summary": "first map"}
-        if prev_map_id:
-            diff_summary = await summarize_map_diff(
-                request,
-                prev_map_id,
-                map_id,
-                session,
-                postgis_provider=postgis_provider,
-                layer_describer=layer_describer,
-                chat_args=chat_args,
-                connection_manager=connection_manager,
-            )
-
-        # Update project to include the new map
-        await conn.execute(
-            """
-            UPDATE user_mundiai_projects
-            SET maps = array_append(maps, $1),
-                map_diff_messages = array_append(map_diff_messages, $2)
-            WHERE id = $3
-            """,
-            new_map_id,
-            diff_summary["diff_summary"],
-            source_map["project_id"],
-        )
-
-        return {
-            "map_id": new_map_id,
-            "project_id": source_map["project_id"],
-        }
 
 
 @router.get(
@@ -2030,89 +1889,6 @@ async def get_user_maps(
 
         # Return the list of maps
         return UserMapsResponse(maps=maps_response)
-
-
-@router.get(
-    "/{prev_map_id}/diff/{new_map_id}",
-    operation_id="summarize_map_diff",
-)
-async def summarize_map_diff(
-    request: Request,
-    prev_map_id: str,
-    new_map_id: str,
-    session: UserContext = Depends(verify_session_required),
-    postgis_provider: Callable = Depends(get_postgis_provider),
-    layer_describer: LayerDescriber = Depends(get_layer_describer),
-    chat_args: ChatArgsProvider = Depends(get_chat_args_provider),
-    connection_manager: PostgresConnectionManager = Depends(
-        get_postgres_connection_manager
-    ),
-):
-    """Summarize the difference between two map versions."""
-    # Get descriptions for both maps
-    prev_map_description = await get_map_description(
-        request,
-        prev_map_id,
-        session,
-        postgis_provider=postgis_provider,
-        layer_describer=layer_describer,
-        connection_manager=connection_manager,
-    )
-    new_map_description = await get_map_description(
-        request,
-        new_map_id,
-        session,
-        postgis_provider=postgis_provider,
-        layer_describer=layer_describer,
-        connection_manager=connection_manager,
-    )
-
-    prev_text = prev_map_description.body.decode("utf-8")
-    new_text = new_map_description.body.decode("utf-8")
-
-    # Calculate diff
-    diff = list(
-        difflib.unified_diff(
-            prev_text.splitlines(),
-            new_text.splitlines(),
-            n=0,
-        )
-    )
-    diff_content = "\n".join(diff)
-
-    # Use OpenAI to summarize the diff
-    client = get_openai_client(request)
-    chat_completions_args = await chat_args.get_args(
-        session.get_user_id(), "summarize_map_diff"
-    )
-    with tracer.start_as_current_span("app.summarize_map_diff.openai"):
-        response = await client.chat.completions.create(
-            **chat_completions_args,
-            messages=[
-                {
-                    "role": "system",
-                    "content": """
-    Summarize the map changes in 8 words or less based on the diff provided.
-    Be specific but concise about what changed.
-
-    Coordinate bounds change often, and are rarely important.
-
-    Keep your response to a maximum of 8 words. Use lowercase except for proper nouns/acronyms
-    ("fixed polygons" instead of "Fixed polygons")
-
-    If no changes, use "no edits".
-    """,
-                },
-                {
-                    "role": "user",
-                    "content": diff_content,
-                },
-            ],
-            max_tokens=30,
-        )
-
-    summary = response.choices[0].message.content.strip()
-    return {"diff_summary": summary}
 
 
 # Export both routers
