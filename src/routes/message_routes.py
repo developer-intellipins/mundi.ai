@@ -1230,13 +1230,12 @@ async def process_chat_interaction_task(
                                             await conn.execute(
                                                 """
                                                 INSERT INTO map_layers
-                                                (layer_id, owner_uuid, name, path, type, postgis_connection_id, postgis_query, feature_count, bounds, geometry_type, source_map_id, created_on, last_edited, postgis_attribute_column_list)
+                                                (layer_id, owner_uuid, name, type, postgis_connection_id, postgis_query, feature_count, bounds, geometry_type, source_map_id, created_on, last_edited, postgis_attribute_column_list)
                                                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $12)
                                                 """,
                                                 layer_id,
                                                 user_id,
                                                 layer_name,
-                                                "",  # Empty path for PostGIS layers
                                                 "postgis",
                                                 postgis_connection_id,
                                                 query,
