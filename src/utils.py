@@ -15,7 +15,6 @@
 
 import os
 import boto3
-import subprocess
 import tempfile
 import zipfile
 import shutil
@@ -80,7 +79,7 @@ def get_bucket_name():
     return os.environ["S3_BUCKET"]
 
 
-def process_zip_with_shapefile(zip_file_path):
+async def process_zip_with_shapefile(zip_file_path):
     temp_dir = tempfile.mkdtemp()
 
     try:
@@ -121,7 +120,13 @@ def process_zip_with_shapefile(zip_file_path):
             layer_name,
         ]
 
-        subprocess.run(ogr_cmd, check=True)
+        process = await asyncio.create_subprocess_exec(*ogr_cmd)
+        await process.wait()
+
+        if process.returncode != 0:
+            raise Exception(
+                f"ogr2ogr command failed with exit code {process.returncode}"
+            )
 
         return gpkg_file_path, temp_dir
 

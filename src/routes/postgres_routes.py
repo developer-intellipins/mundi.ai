@@ -37,6 +37,7 @@ from ..dependencies.session import (
 from ..utils import get_openai_client
 from typing import List, Optional
 import logging
+from pathlib import Path
 import difflib
 from datetime import datetime
 from pyproj import Transformer
@@ -1232,7 +1233,7 @@ async def internal_upload_layer(
             if file_ext.lower() == ".zip":
                 try:
                     # Process the ZIP file to extract and convert shapefiles to GeoPackage
-                    gpkg_file_path, temp_dir = process_zip_with_shapefile(
+                    gpkg_file_path, temp_dir = await process_zip_with_shapefile(
                         temp_file_path
                     )
 
@@ -1591,10 +1592,10 @@ async def internal_upload_layer(
 
                 # Generate PMTiles for vector layers
                 if feature_count is not None and feature_count > 0:
-                    # Generate PMTiles asynchronously
+                    # Generate PMTiles asynchronously using local file
                     pmtiles_key = await generate_pmtiles_for_layer(
                         new_layer_id,
-                        s3_key,
+                        Path(temp_file_path),
                         feature_count,
                         user_id,
                         project_id,
@@ -1639,7 +1640,7 @@ async def internal_upload_layer(
 
 async def generate_pmtiles_for_layer(
     layer_id: str,
-    s3_key: str,
+    local_input_file: Path,
     feature_count: int,
     user_id: str = None,
     project_id: str = None,
@@ -1648,13 +1649,6 @@ async def generate_pmtiles_for_layer(
     bucket_name = get_bucket_name()
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        # Get file extension from s3_key
-        file_extension = os.path.splitext(s3_key)[1]
-        local_input_file = os.path.join(temp_dir, f"layer_{layer_id}{file_extension}")
-
-        # Download the vector file from S3
-        s3 = await get_async_s3_client()
-        await s3.download_file(bucket_name, s3_key, local_input_file)
         # Create local output PMTiles file
         local_output_file = os.path.join(temp_dir, f"layer_{layer_id}.pmtiles")
         # Reproject to EPSG:4326 and convert to FlatGeobuf
@@ -1668,7 +1662,7 @@ async def generate_pmtiles_for_layer(
             "-nlt",
             "PROMOTE_TO_MULTI",
             reprojected_file,
-            local_input_file,
+            str(local_input_file),
         ]
         process = await asyncio.create_subprocess_exec(*ogr_cmd)
         await process.wait()
