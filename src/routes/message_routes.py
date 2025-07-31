@@ -1022,6 +1022,8 @@ async def process_chat_interaction_task(
                                 "postgis_connection_id"
                             )
                             query = tool_args.get("query")
+                            # seemingly innocuous but deeply insidious
+                            query = query.rstrip().rstrip(";")
                             layer_name = tool_args.get("layer_name")
 
                             if not postgis_connection_id or not query:
