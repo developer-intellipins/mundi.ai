@@ -132,7 +132,7 @@ async def test_describe_layer_endpoint(test_map_with_coho_layer, auth_client):
     assert '"fill-color": "#FF6B6B"' in content, "Missing fill color"
     assert '"fill-opacity":' in content, "Missing fill opacity"
     assert '"fill-outline-color": "#000"' in content, "Missing fill outline color"
-    assert '"line-color": "#000"' in content, "Missing line color"
+    assert '"line-color":' in content, "Missing line color"
     assert '"line-width": 1' in content, "Missing line width"
 
 

@@ -57,7 +57,12 @@ def generate_maplibre_layers_for_layer_id(layer_id: str, geometry_type: str) -> 
                     "circle-radius": 6,
                     "circle-color": selected_color,
                     "circle-stroke-width": 1,
-                    "circle-stroke-color": "#000",
+                    "circle-stroke-color": [
+                        "case",
+                        ["boolean", ["feature-state", "selected"], False],
+                        "#FF8C42",
+                        "#000",
+                    ],
                 },
                 "metadata": {"layer_name": layer_id},
             }
@@ -69,7 +74,15 @@ def generate_maplibre_layers_for_layer_id(layer_id: str, geometry_type: str) -> 
                 "type": "line",
                 "source": layer_id,
                 "source-layer": "reprojectedfgb",
-                "paint": {"line-color": selected_color, "line-width": 2},
+                "paint": {
+                    "line-color": [
+                        "case",
+                        ["boolean", ["feature-state", "selected"], False],
+                        "#FF8C42",
+                        selected_color,
+                    ],
+                    "line-width": 2,
+                },
                 "metadata": {"layer_name": layer_id},
             }
         )
@@ -86,7 +99,7 @@ def generate_maplibre_layers_for_layer_id(layer_id: str, geometry_type: str) -> 
                         "case",
                         ["boolean", ["feature-state", "selected"], False],
                         0.9,
-                        0.5,
+                        0.6,
                     ],
                     "fill-outline-color": "#000",
                 },
@@ -100,7 +113,15 @@ def generate_maplibre_layers_for_layer_id(layer_id: str, geometry_type: str) -> 
                 "type": "line",
                 "source": layer_id,
                 "source-layer": "reprojectedfgb",
-                "paint": {"line-color": "#000", "line-width": 1},
+                "paint": {
+                    "line-color": [
+                        "case",
+                        ["boolean", ["feature-state", "selected"], False],
+                        "#FF8C42",
+                        "#000",
+                    ],
+                    "line-width": 1,
+                },
                 "metadata": {"layer_name": layer_id},
             }
         )

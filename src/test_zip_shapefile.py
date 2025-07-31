@@ -81,7 +81,7 @@ async def test_zip_shapefile_upload(auth_client):
 
             geojson = response.json()
             assert "features" in geojson
-            assert len(geojson["features"]) > 0
+            assert len(geojson["features"]) == 2975
 
             feature = geojson["features"][0]
             assert "geometry" in feature
@@ -148,7 +148,7 @@ async def test_zip_shapefile_upload_macosx(auth_client):
 
         geojson = response.json()
         assert "features" in geojson
-        assert len(geojson["features"]) > 0
+        assert len(geojson["features"]) == 2975
 
         feature = geojson["features"][0]
         assert "geometry" in feature
