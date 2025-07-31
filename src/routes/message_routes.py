@@ -1231,7 +1231,7 @@ async def process_chat_interaction_task(
                                                 """
                                                 INSERT INTO map_layers
                                                 (layer_id, owner_uuid, name, type, postgis_connection_id, postgis_query, feature_count, bounds, geometry_type, source_map_id, created_on, last_edited, postgis_attribute_column_list)
-                                                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $12)
+                                                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $11)
                                                 """,
                                                 layer_id,
                                                 user_id,
