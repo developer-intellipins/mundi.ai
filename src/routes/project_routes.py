@@ -490,53 +490,36 @@ async def add_postgis_connection(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        # Check if connection already exists
-        existing_conn = await conn.fetchrow(
+        # Generate new connection ID
+        connection_id = generate_id(prefix="C")
+
+        # Insert the new connection
+        await conn.execute(
             """
-            SELECT id FROM project_postgres_connections
-            WHERE project_id = $1 AND user_id = $2 AND connection_uri = $3 AND soft_deleted_at IS NULL
+            INSERT INTO project_postgres_connections
+            (id, project_id, user_id, connection_uri, connection_name)
+            VALUES ($1, $2, $3, $4, $5)
             """,
+            connection_id,
             project.id,
             user_id,
             connection_uri,
+            connection_data.connection_name,
         )
 
-        if not existing_conn:
-            # Generate new connection ID
-            connection_id = generate_id(prefix="C")
+        # Start background task to generate database documentation
+        background_tasks.add_task(
+            database_documenter.generate_documentation,
+            connection_id,
+            connection_uri,
+            connection_data.connection_name or "Database",
+            connection_manager,
+        )
 
-            # Insert the new connection
-            await conn.execute(
-                """
-                INSERT INTO project_postgres_connections
-                (id, project_id, user_id, connection_uri, connection_name)
-                VALUES ($1, $2, $3, $4, $5)
-                """,
-                connection_id,
-                project.id,
-                user_id,
-                connection_uri,
-                connection_data.connection_name,
-            )
-
-            # Start background task to generate database documentation
-            background_tasks.add_task(
-                database_documenter.generate_documentation,
-                connection_id,
-                connection_uri,
-                connection_data.connection_name or "Database",
-                connection_manager,
-            )
-
-            return PostgresCreateConnectionResponse(
-                message="PostgreSQL connection added successfully",
-                connection_id=connection_id,
-            )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Connection URI already exists",
-            )
+        return PostgresCreateConnectionResponse(
+            message="PostgreSQL connection added successfully",
+            connection_id=connection_id,
+        )
 
 
 @project_router.delete(

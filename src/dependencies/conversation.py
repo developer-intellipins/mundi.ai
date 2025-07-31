@@ -114,7 +114,9 @@ async def get_or_create_conversation(
             map_id,
         )
         if not conversation:
-            raise HTTPException(404, f"Conversation {conversation_id} or map {map_id} not found")
+            raise HTTPException(
+                404, f"Conversation {conversation_id} or map {map_id} not found"
+            )
 
         return Conversation(
             id=conversation["id"],
