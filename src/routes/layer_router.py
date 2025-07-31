@@ -36,7 +36,6 @@ from ..utils import get_openai_client
 import logging
 import re
 from redis import Redis
-import httpx
 import tempfile
 import asyncio
 from typing import List
@@ -723,36 +722,17 @@ async def get_layer_geojson(
     # Retrieve the vector data
     bucket_name = get_bucket_name()
     with tempfile.TemporaryDirectory() as temp_dir:
-        # Get file extension from s3_key or path
-        s3_key_or_path = layer.s3_key or layer.path
+        # Get file extension from s3_key
+        s3_key = layer.s3_key
+        file_extension = os.path.splitext(s3_key)[1]
 
-        # If the path is a presigned URL, download using httpx
-        if s3_key_or_path.startswith("http"):
-            # Extract file extension from URL (before query parameters)
-            url_path = s3_key_or_path.split("?")[0]
-            file_extension = os.path.splitext(url_path)[1]
+        local_input_file = os.path.join(
+            temp_dir, f"layer_{layer.layer_id}_input{file_extension}"
+        )
 
-            local_input_file = os.path.join(
-                temp_dir, f"layer_{layer.layer_id}_input{file_extension}"
-            )
-
-            async with httpx.AsyncClient() as client:
-                response = await client.get(s3_key_or_path)
-                response.raise_for_status()
-                with open(local_input_file, "wb") as f:
-                    f.write(response.content)
-        else:
-            # Otherwise, assume it's an S3 key
-            s3_key = s3_key_or_path
-            file_extension = os.path.splitext(s3_key)[1]
-
-            local_input_file = os.path.join(
-                temp_dir, f"layer_{layer.layer_id}_input{file_extension}"
-            )
-
-            # Download from S3 using async client
-            s3 = await get_async_s3_client()
-            await s3.download_file(bucket_name, s3_key, local_input_file)
+        # Download from S3 using async client
+        s3 = await get_async_s3_client()
+        await s3.download_file(bucket_name, s3_key, local_input_file)
 
         # Convert to GeoJSON using ogr2ogr
         local_geojson_file = os.path.join(temp_dir, f"layer_{layer.layer_id}.geojson")

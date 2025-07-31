@@ -131,7 +131,6 @@ class UserMapsResponse(BaseModel):
 class LayerResponse(BaseModel):
     id: str
     name: str
-    path: str
     type: str
     metadata: Optional[dict] = None
     bounds: Optional[List[float]] = (
@@ -474,7 +473,6 @@ async def get_map_route(
             """
             SELECT layer_id AS id,
                     name,
-                    path,
                     type,
                     metadata,
                     bounds,
@@ -633,7 +631,7 @@ async def get_map_layers(
         # Get all layers by their IDs using ANY() instead of f-string
         layers = await conn.fetch(
             """
-            SELECT layer_id as id, name, path, type, raster_cog_url, metadata, bounds, geometry_type, feature_count
+            SELECT layer_id as id, name, type, raster_cog_url, metadata, bounds, geometry_type, feature_count
             FROM map_layers
             WHERE layer_id = ANY($1)
             ORDER BY id
@@ -1361,15 +1359,6 @@ async def internal_upload_layer(
             # Upload file to S3/MinIO
             await s3_client.upload_file(temp_file_path, bucket_name, s3_key)
 
-            # Generate a presigned URL for the file
-            presigned_url = await s3_client.generate_presigned_url(
-                ClientMethod="get_object",
-                Params={"Bucket": bucket_name, "Key": s3_key},
-                ExpiresIn=3600 * 24 * 7,  # 1 week
-            )
-
-            # No need to rewrite URL - host networking ensures hostname consistency
-
             # Get layer bounds using GDAL
             geometry_type = "unknown"
             feature_count = None
@@ -1517,14 +1506,13 @@ async def internal_upload_layer(
             new_layer_result = await conn.fetchrow(
                 """
                 INSERT INTO map_layers
-                (layer_id, owner_uuid, name, path, type, metadata, bounds, geometry_type, feature_count, s3_key, size_bytes, source_map_id)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                (layer_id, owner_uuid, name, type, metadata, bounds, geometry_type, feature_count, s3_key, size_bytes, source_map_id)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 RETURNING layer_id
                 """,
                 layer_id,
                 user_id,
                 layer_name,
-                presigned_url,
                 layer_type,
                 json.dumps(metadata_dict),
                 bounds,

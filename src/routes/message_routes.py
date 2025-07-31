@@ -316,7 +316,7 @@ async def get_map_tree(map: MundiMap = Depends(get_map), conversation_id: int = 
         if all_layer_ids:
             db_layers = await conn.fetch(
                 """
-                SELECT layer_id, owner_uuid, name, path, s3_key, type, raster_cog_url,
+                SELECT layer_id, owner_uuid, name, s3_key, type, raster_cog_url,
                        postgis_connection_id, postgis_query, metadata, bounds, geometry_type,
                        feature_count, size_bytes, source_map_id, created_on, last_edited
                 FROM map_layers

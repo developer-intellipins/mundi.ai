@@ -157,9 +157,6 @@ class MapLayer(Base):
     )  # 12-char unique ID for layers, starts with L
     owner_uuid = Column(UUID, nullable=False)
     name = Column(String, nullable=False)  # layer name
-    path = Column(
-        String, nullable=False
-    )  # presigned GET URL in S3 (deprecated because expires)
     s3_key = Column(String)
     type = Column(
         String, nullable=False

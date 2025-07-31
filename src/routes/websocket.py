@@ -410,7 +410,7 @@ async def kue_ephemeral_action(
     )
 
     # Put it on the event loop to prevent race conditions
-    await asyncio.sleep(0.001)
+    await asyncio.sleep(0.05)
 
     try:
         # Store for recently disconnected users from this specific conversation
