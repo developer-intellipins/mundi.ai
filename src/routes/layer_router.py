@@ -593,6 +593,7 @@ async def get_layer_mvt_tile(
     z: int,
     x: int,
     y: int,
+    request: Request,
     layer: MapLayer = Depends(get_layer),
     session: UserContext = Depends(verify_session_required),
 ):
@@ -670,8 +671,38 @@ async def get_layer_mvt_tile(
             SELECT ST_AsMVT(mvtgeom, 'reprojectedfgb', 4096, 'geom', 'id') FROM mvtgeom
             """
 
-            # Execute query and get MVT data
-            mvt_data = await postgis_conn.fetchval(mvt_query, xmin, ymin, xmax, ymax)
+            # race between the tile fetch and client disconnect detection
+            # note that proxies sometimes swallow these disconnection events
+            async def watch_disconnect():
+                while True:
+                    message = await request.receive()
+                    if message["type"] == "http.disconnect":
+                        return "disconnect"
+
+            fetchval_task = asyncio.create_task(
+                postgis_conn.fetchval(mvt_query, xmin, ymin, xmax, ymax)
+            )
+            disconnect_task = asyncio.create_task(watch_disconnect())
+
+            done, pending = await asyncio.wait(
+                [fetchval_task, disconnect_task], return_when=asyncio.FIRST_COMPLETED
+            )
+
+            # cancel the old query if it's still running
+            for task in pending:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+            completed_task = done.pop()
+            if completed_task == disconnect_task:
+                return Response(
+                    content=b"", media_type="application/vnd.mapbox-vector-tile"
+                )
+            else:
+                mvt_data = completed_task.result()
 
         if mvt_data is None:
             mvt_data = b""
