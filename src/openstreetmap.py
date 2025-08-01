@@ -19,14 +19,14 @@ import asyncio
 import aiohttp
 from pathlib import Path
 from typing import List
-from fastapi import Request, UploadFile
+from fastapi import UploadFile
 from io import BytesIO
 from src.dependencies.session import UserContext
-from src.routes.postgres_routes import upload_layer
+from src.routes.postgres_routes import internal_upload_layer
+from src.structures import async_conn
 
 
 async def download_from_openstreetmap(
-    request: Request,
     map_id: str,
     bbox: List[float],
     tags: str,
@@ -48,6 +48,22 @@ async def download_from_openstreetmap(
                     f"OSM API request failed with status {response.status}, {(await response.text())[:100]}"
                 )
             geojson_data = await response.read()
+
+    # Get project_id from map_id
+    user_id = session.get_user_id()
+    async with async_conn("get_project_id_for_osm") as conn:
+        map_row = await conn.fetchrow(
+            """
+            SELECT project_id
+            FROM user_mundiai_maps
+            WHERE id = $1 AND owner_uuid = $2 AND soft_deleted_at IS NULL
+            """,
+            map_id,
+            user_id,
+        )
+        if not map_row:
+            raise Exception(f"Map {map_id} not found")
+        project_id: str = map_row["project_id"]
 
     with tempfile.TemporaryDirectory() as temp_dir:
         # Save GeoJSON to temporary file
@@ -124,13 +140,13 @@ async def download_from_openstreetmap(
                             filename=f"osm_{geom['name']}.gpkg", file=BytesIO(f.read())
                         )
 
-                    layer_response = await upload_layer(
-                        request=Request(scope={"type": "http"}),
+                    layer_response = await internal_upload_layer(
                         map_id=map_id,
                         file=upload_file,
                         layer_name=f"{new_layer_name}_{geom['name']}",
                         add_layer_to_map=False,
-                        session=session,
+                        user_id=user_id,
+                        project_id=project_id,
                     )
 
                     uploaded_layers.append(

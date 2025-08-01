@@ -1604,7 +1604,6 @@ async def process_chat_interaction_task(
                                         f"Downloading data from OpenStreetMap: {tags}",
                                     ):
                                         tool_result = await download_from_openstreetmap(
-                                            request=request,
                                             map_id=map_id,
                                             bbox=bbox,
                                             tags=tags,
