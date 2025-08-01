@@ -1670,18 +1670,16 @@ async def render_map(
     width: int = 1024,
     height: int = 600,
     bgcolor: str = "#ffffff",
-    style_json: Optional[str] = None,
     base_map: BaseMapProvider = Depends(get_base_map_provider),
     session: Optional[UserContext] = Depends(verify_session_optional),
 ):
-    if style_json is None:
-        style_json = await get_map_style(
-            request,
-            map.id,
-            only_show_inline_sources=True,
-            session=session,
-            base_map=base_map,
-        )
+    style_json = await get_map_style(
+        request,
+        map.id,
+        only_show_inline_sources=True,
+        session=session,
+        base_map=base_map,
+    )
 
     return (
         await render_map_internal(
