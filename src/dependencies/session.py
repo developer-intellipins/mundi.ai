@@ -65,6 +65,11 @@ async def verify_session_optional(request=None) -> Optional[UserContext]:
     return await verify_session(session_required=False)()
 
 
+async def session_user_id(request=None) -> str:
+    session = await verify_session_required(request)
+    return session.get_user_id()
+
+
 async def verify_websocket(websocket: WebSocket) -> UserContext:
     auth_mode = os.environ.get("MUNDI_AUTH_MODE")
 

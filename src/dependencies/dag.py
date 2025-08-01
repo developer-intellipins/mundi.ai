@@ -17,7 +17,7 @@ from fastapi import Path, Depends, HTTPException
 
 from src.database.models import MundiMap, MundiProject, MapLayer
 from src.structures import async_conn
-from src.dependencies.session import UserContext, verify_session_required
+from src.dependencies.session import UserContext, verify_session_required, session_user_id
 from src.dag import generate_id, ForkReason
 
 
@@ -136,10 +136,9 @@ async def get_map(
 
 async def get_layer(
     layer_id: str = Path(...),
-    session: UserContext = Depends(verify_session_required),
+    user_id: str = Depends(session_user_id),
 ) -> MapLayer:
     """Get a layer that the user owns"""
-    user_id = session.get_user_id()
 
     async with async_conn("get_layer") as conn:
         layer_row = await conn.fetchrow(
