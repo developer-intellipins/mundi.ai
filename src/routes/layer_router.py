@@ -26,10 +26,11 @@ from fastapi import (
 from fastapi.responses import StreamingResponse, Response
 from ..dependencies.db_pool import get_pooled_connection
 from ..dependencies.dag import get_layer
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from src.database.models import MapLayer
 from ..dependencies.session import (
     verify_session_required,
+    session_user_id,
     UserContext,
 )
 from ..utils import get_openai_client
@@ -51,6 +52,9 @@ from src.structures import get_async_db_connection, async_conn
 from ..dependencies.layer_describer import LayerDescriber, get_layer_describer
 from ..dependencies.chat_completions import ChatArgsProvider, get_chat_args_provider
 from opentelemetry import trace
+from src.symbology.verify import StyleValidationError, verify_style_json_str
+from src.dependencies.base_map import get_base_map_provider
+from src.utils import generate_id
 
 # Global semaphore to limit concurrent social image renderings
 # This prevents OOM issues when many maps load simultaneously
@@ -985,4 +989,110 @@ async def describe_layer(
     return Response(
         content=markdown_response,
         media_type="text/plain",
+    )
+
+
+class SetStyleRequest(BaseModel):
+    maplibre_json_layers: list = Field(
+        description="Array of MapLibre layer objects like fill, line, symbol [(style spec v8)](https://maplibre.org/maplibre-style-spec/)"
+    )
+    map_id: str = Field(description="Map ID where this new style will be applied")
+
+
+class SetStyleResponse(BaseModel):
+    style_id: str = Field(description="ID of the created style")
+    layer_id: str = Field(description="ID of the layer the style was applied to")
+
+
+@layer_router.post(
+    "/layers/{layer_id}/style",
+    operation_id="set_layer_style",
+    summary="Set layer style",
+    response_model=SetStyleResponse,
+)
+async def set_layer_style(
+    request: SetStyleRequest,
+    layer: MapLayer = Depends(get_layer),
+    user_id: str = Depends(session_user_id),
+) -> SetStyleResponse:
+    """Sets a layer's active style in the map to a MapLibre JSON layer list.
+
+    This operation will fail if the style is invalid according to the
+    [style spec](https://maplibre.org/maplibre-style-spec/layers/) and the source
+    definition.
+
+    Returns the created style_id and confirmation that it has been applied.
+    """
+    layer_id = layer.layer_id
+
+    layers = request.maplibre_json_layers
+    if not isinstance(layers, list):
+        raise HTTPException(
+            status_code=400,
+            detail="Expected maplibre_json_layers to be an array of layer objects",
+        )
+
+    for layer_obj in layers:
+        if not isinstance(layer_obj, dict):
+            raise HTTPException(
+                status_code=400,
+                detail="Expected layer object to be a dict",
+            )
+
+        # will be removed later if not needed
+        layer_obj["source-layer"] = "reprojectedfgb"
+        # don't cross-get sources
+        if layer_obj.get("source") != layer_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Layer source must be '{layer_id}'",
+            )
+
+    from src.routes.postgres_routes import get_map_style_internal
+
+    style_json = await get_map_style_internal(
+        map_id=request.map_id,
+        base_map=get_base_map_provider(),
+        only_show_inline_sources=True,
+        override_layers=json.dumps({layer_id: layers}),
+    )
+
+    # Validate the complete style
+    try:
+        verify_style_json_str(json.dumps(style_json))
+    except StyleValidationError as e:
+        raise HTTPException(
+            status_code=400, detail=f"Style validation failed: {str(e)}"
+        )
+
+    style_id = generate_id(prefix="S")
+
+    async with get_async_db_connection() as conn:
+        await conn.execute(
+            """
+            INSERT INTO layer_styles
+            (style_id, layer_id, style_json, created_by)
+            VALUES ($1, $2, $3, $4)
+            """,
+            style_id,
+            layer_id,
+            json.dumps(layers),
+            user_id,
+        )
+
+        await conn.execute(
+            """
+            INSERT INTO map_layer_styles (map_id, layer_id, style_id)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (map_id, layer_id)
+            DO UPDATE SET style_id = $3
+            """,
+            request.map_id,
+            layer_id,
+            style_id,
+        )
+
+    return SetStyleResponse(
+        style_id=style_id,
+        layer_id=layer_id,
     )

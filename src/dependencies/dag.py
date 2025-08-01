@@ -17,7 +17,11 @@ from fastapi import Path, Depends, HTTPException
 
 from src.database.models import MundiMap, MundiProject, MapLayer
 from src.structures import async_conn
-from src.dependencies.session import UserContext, verify_session_required, session_user_id
+from src.dependencies.session import (
+    UserContext,
+    verify_session_required,
+    session_user_id,
+)
 from src.dag import generate_id, ForkReason
 
 

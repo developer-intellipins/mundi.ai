@@ -48,16 +48,20 @@ from openai.types.chat import ChatCompletionMessageToolCallParam
 from openai import APIError
 
 from src.symbology.llm import generate_maplibre_layers_for_layer_id
+
+from src.routes.layer_router import (
+    set_layer_style as set_layer_style_route,
+    SetStyleRequest,
+)
+from src.dependencies.dag import get_layer
 from src.structures import (
     async_conn,
     SanitizedMessage,
     convert_mundi_message_to_sanitized,
 )
-from src.symbology.verify import StyleValidationError, verify_style_json_str
 from src.utils import get_openai_client
 from src.routes.postgres_routes import (
     generate_id,
-    get_map_style_internal,
     get_map_description,
     internal_upload_layer,
 )
@@ -67,7 +71,6 @@ from src.geoprocessing.dispatch import (
     get_tools,
 )
 from src.dependencies.conversation import get_or_create_conversation
-from src.dependencies.base_map import get_base_map_provider
 from src.duckdb import execute_duckdb_query
 from src.utils import get_async_s3_client, get_bucket_name
 from src.dependencies.postgis import get_postgis_provider
@@ -717,7 +720,7 @@ async def process_chat_interaction_task(
                         "type": "function",
                         "function": {
                             "name": "new_layer_from_postgis",
-                            "description": "Creates a new layer, given a PostGIS connection and query, and adds it to the map so the user can see it. Layer will automatically pull data from PostGIS. Modify style using the create_layer_style tool.",
+                            "description": "Creates a new layer, given a PostGIS connection and query, and adds it to the map so the user can see it. Layer will automatically pull data from PostGIS. Modify style using the set_layer_style tool.",
                             "strict": True,
                             "parameters": {
                                 "type": "object",
@@ -771,14 +774,14 @@ async def process_chat_interaction_task(
                     {
                         "type": "function",
                         "function": {
-                            "name": "create_layer_style",
-                            "description": "Creates a new style for a layer with MapLibre JSON layers. Automatically renders the style for visual inspection.",
+                            "name": "set_layer_style",
+                            "description": "Creates a new style for a layer with MapLibre JSON layers and immediately applies it as the active style",
                             "parameters": {
                                 "type": "object",
                                 "properties": {
                                     "layer_id": {
                                         "type": "string",
-                                        "description": "The ID of the layer to create a style for",
+                                        "description": "The ID of the layer to create and apply a style for",
                                     },
                                     "maplibre_json_layers_str": {
                                         "type": "string",
@@ -786,27 +789,6 @@ async def process_chat_interaction_task(
                                     },
                                 },
                                 "required": ["layer_id", "maplibre_json_layers_str"],
-                            },
-                        },
-                    },
-                    {
-                        "type": "function",
-                        "function": {
-                            "name": "set_active_style",
-                            "description": "Sets a style as active for a layer in a map",
-                            "parameters": {
-                                "type": "object",
-                                "properties": {
-                                    "layer_id": {
-                                        "type": "string",
-                                        "description": "The ID of the layer",
-                                    },
-                                    "style_id": {
-                                        "type": "string",
-                                        "description": "The ID of the style to set as active",
-                                    },
-                                },
-                                "required": ["layer_id", "style_id"],
                             },
                         },
                     },
@@ -1448,7 +1430,7 @@ async def process_chat_interaction_task(
                                     content=json.dumps(tool_result),
                                 )
                             )
-                        elif function_name == "create_layer_style":
+                        elif function_name == "set_layer_style":
                             layer_id = tool_args.get("layer_id")
                             maplibre_json_layers_str = tool_args.get(
                                 "maplibre_json_layers_str"
@@ -1460,124 +1442,44 @@ async def process_chat_interaction_task(
                                     "error": "Missing required parameters (layer_id or maplibre_json_layers_str).",
                                 }
                             else:
-                                # Generate a new style ID
-                                style_id = generate_id(prefix="S")
-
                                 try:
                                     layers = json.loads(maplibre_json_layers_str)
 
-                                    # Validate that layers is a list
-                                    if not isinstance(layers, list):
-                                        raise ValueError(
-                                            f"Expected a JSON array of layer objects, but got {type(layers).__name__}: {repr(layers)[:200]}"
+                                    layer = await get_layer(layer_id, user_id)
+
+                                    async with kue_ephemeral_action(
+                                        conversation.id,
+                                        f"Styling layer {layer.name}...",
+                                        update_style_json=True,
+                                    ):
+                                        style_response = await set_layer_style_route(
+                                            request=SetStyleRequest(
+                                                maplibre_json_layers=layers,
+                                                map_id=map_id,
+                                            ),
+                                            layer=layer,
+                                            user_id=user_id,
                                         )
-
-                                    # Add source-layer property if missing to fix KeyError: 'source-layer'
-                                    for layer in layers:
-                                        if isinstance(layer, dict):
-                                            layer["source-layer"] = "reprojectedfgb"
-                                        else:
-                                            raise ValueError(
-                                                f"Expected layer object to be a dict, but got {type(layer).__name__}: {repr(layer)[:200]}"
-                                            )
-
-                                    # Get complete map style with our layer styling to validate it
-                                    base_map_provider = get_base_map_provider()
-                                    style_json = await get_map_style_internal(
-                                        map_id=map_id,
-                                        base_map=base_map_provider,
-                                        only_show_inline_sources=True,
-                                        override_layers=json.dumps({layer_id: layers}),
-                                    )
-
-                                    # Validate the complete style
-                                    verify_style_json_str(json.dumps(style_json))
-
-                                    # If validation passes, create the style in the database
-                                    await conn.execute(
-                                        """
-                                        INSERT INTO layer_styles
-                                        (style_id, layer_id, style_json, created_by)
-                                        VALUES ($1, $2, $3, $4)
-                                        """,
-                                        style_id,
-                                        layer_id,
-                                        json.dumps(layers),
-                                        user_id,
-                                    )
 
                                     tool_result = {
                                         "status": "success",
-                                        "style_id": style_id,
-                                        "layer_id": layer_id,
+                                        "style_id": style_response.style_id,
+                                        "layer_id": style_response.layer_id,
+                                        "message": f"Style {style_response.style_id} created and applied to layer {layer_id}",
                                     }
+
                                 except json.JSONDecodeError as e:
-                                    print(f"JSON decode error: {str(e)}")
                                     tool_result = {
                                         "status": "error",
                                         "error": f"Invalid JSON format: {str(e)}",
                                         "layer_id": layer_id,
                                     }
-                                except ValueError as e:
-                                    print(f"Value error in layer style: {str(e)}")
+                                except Exception as e:
                                     tool_result = {
                                         "status": "error",
-                                        "error": str(e),
+                                        "error": f"Failed to create and apply style: {str(e)}",
                                         "layer_id": layer_id,
                                     }
-                                except StyleValidationError as e:
-                                    print(
-                                        f"Style validation error: {str(e)}",
-                                        traceback.format_exc(),
-                                        type(e),
-                                    )
-                                    tool_result = {
-                                        "status": "error",
-                                        "error": f"Style validation failed: {str(e)}",
-                                        "layer_id": layer_id,
-                                    }
-
-                            await add_chat_completion_message(
-                                ChatCompletionToolMessageParam(
-                                    role="tool",
-                                    tool_call_id=tool_call.id,
-                                    content=json.dumps(tool_result),
-                                ),
-                            )
-                        elif function_name == "set_active_style":
-                            layer_id = tool_args.get("layer_id")
-                            style_id = tool_args.get("style_id")
-
-                            if not all([layer_id, style_id]):
-                                tool_result = {
-                                    "status": "error",
-                                    "error": "Missing required parameters (layer_id, or style_id).",
-                                }
-                            else:
-                                # Add or update the map_layer_styles entry
-                                async with kue_ephemeral_action(
-                                    conversation.id,
-                                    "Choosing a new style",
-                                    update_style_json=True,
-                                ):
-                                    await conn.execute(
-                                        """
-                                        INSERT INTO map_layer_styles (map_id, layer_id, style_id)
-                                        VALUES ($1, $2, $3)
-                                        ON CONFLICT (map_id, layer_id)
-                                        DO UPDATE SET style_id = $3
-                                        """,
-                                        map_id,
-                                        layer_id,
-                                        style_id,
-                                    )
-
-                                tool_result = {
-                                    "status": "success",
-                                    "message": f"Style {style_id} set as active for layer {layer_id}, user can now see it",
-                                    "layer_id": layer_id,
-                                    "style_id": style_id,
-                                }
 
                             await add_chat_completion_message(
                                 ChatCompletionToolMessageParam(
