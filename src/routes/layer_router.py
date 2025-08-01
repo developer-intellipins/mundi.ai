@@ -611,30 +611,21 @@ async def get_layer_mvt_tile(
                 detail=f"PostGIS layer {layer.name} has no attribute columns, you must re-create the layer.",
             )
         non_geom_column_names: List[str] = layer.postgis_attribute_column_list + ["id"]
-
         # Get PostGIS connection details and verify ownership
         connection_details = await conn.fetchrow(
             """
             SELECT user_id, connection_uri
             FROM project_postgres_connections
-            WHERE id = $1
+            WHERE id = $1 AND user_id = $2
             """,
             layer.postgis_connection_id,
+            session.get_user_id(),
         )
 
         if not connection_details:
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status_code=status.HTTP_404_NOT_FOUND,
                 detail="PostGIS connection not found",
-            )
-
-        # Require that the connection owner is the requester
-        # TODO this is a double check?
-        if session.get_user_id() != str(connection_details["user_id"]):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication required",
-                headers={"WWW-Authenticate": "Bearer"},
             )
 
     # Calculate tile bounds in Web Mercator (EPSG:3857)
