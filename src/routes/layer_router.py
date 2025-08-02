@@ -633,15 +633,7 @@ async def get_layer_mvt_tile(
                 detail="PostGIS connection not found",
             )
 
-    # Calculate tile bounds in Web Mercator (EPSG:3857)
-    # Web Mercator bounds: [-20037508.34, -20037508.34, 20037508.34, 20037508.34]
-    world_size = 20037508.34 * 2
-    tile_size = world_size / (1 << z)
-
-    xmin = -20037508.34 + x * tile_size
-    ymin = 20037508.34 - (y + 1) * tile_size
-    xmax = -20037508.34 + (x + 1) * tile_size
-    ymax = 20037508.34 - y * tile_size
+    # ST_TileEnvelope requires PostGIS 3.0.0 which was 2019... so
     try:
         # some geometries just aren't valid, so make them valid.
         # can't save the world
@@ -651,7 +643,7 @@ async def get_layer_mvt_tile(
             mvt_query = f"""
             WITH
             bounds_webmerc AS (
-                SELECT ST_MakeEnvelope($1, $2, $3, $4, 3857) AS wm_geom
+                SELECT ST_TileEnvelope($1, $2, $3) AS wm_geom
             ),
             bounds_native AS (
                 SELECT ST_Transform(wm_geom, (SELECT ST_SRID(geom) FROM ({layer.postgis_query}) LIMIT 1)) AS nat_geom,
@@ -680,7 +672,7 @@ async def get_layer_mvt_tile(
                         return "disconnect"
 
             fetchval_task = asyncio.create_task(
-                postgis_conn.fetchval(mvt_query, xmin, ymin, xmax, ymax)
+                postgis_conn.fetchval(mvt_query, z, x, y)
             )
             disconnect_task = asyncio.create_task(watch_disconnect())
 
