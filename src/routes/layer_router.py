@@ -39,7 +39,6 @@ import re
 from redis import Redis
 import tempfile
 import asyncio
-from typing import List
 
 from src.utils import (
     get_bucket_name,
@@ -49,6 +48,7 @@ import duckdb
 import subprocess
 from src.duckdb import execute_duckdb_query
 from src.structures import get_async_db_connection, async_conn
+from src.postgis_tiles import fetch_mvt_tile
 from ..dependencies.layer_describer import LayerDescriber, get_layer_describer
 from ..dependencies.chat_completions import ChatArgsProvider, get_chat_args_provider
 from opentelemetry import trace
@@ -603,19 +603,6 @@ async def get_layer_mvt_tile(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid tile coordinates"
         )
     async with async_conn("mvt") as conn:
-        # Check if layer is a PostGIS type
-        if layer.type != "postgis":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Layer is not a PostGIS type. MVT tiles can only be generated from PostGIS data.",
-            )
-
-        if not layer.postgis_attribute_column_list:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"PostGIS layer {layer.name} has no attribute columns, you must re-create the layer.",
-            )
-        non_geom_column_names: List[str] = layer.postgis_attribute_column_list + ["id"]
         # Get PostGIS connection details and verify ownership
         connection_details = await conn.fetchrow(
             """
@@ -636,32 +623,9 @@ async def get_layer_mvt_tile(
     # ST_TileEnvelope requires PostGIS 3.0.0 which was 2019... so
     try:
         # some geometries just aren't valid, so make them valid.
-        # can't save the world
         async with get_pooled_connection(
             connection_details["connection_uri"]
         ) as postgis_conn:
-            mvt_query = f"""
-            WITH
-            bounds_webmerc AS (
-                SELECT ST_TileEnvelope($1, $2, $3) AS wm_geom
-            ),
-            transformed AS (
-                SELECT {", ".join([f"t.{name}" for name in non_geom_column_names])}, ST_Transform(t.geom, 3857) AS geom
-                FROM ({layer.postgis_query}) t
-            ),
-            candidates AS (
-                SELECT {", ".join([f"t.{name}" for name in non_geom_column_names])}, ST_MakeValid(t.geom) AS geom
-                FROM transformed t, bounds_webmerc b
-                WHERE t.geom && b.wm_geom
-                  AND ST_Intersects(t.geom, b.wm_geom)
-            ),
-            mvtgeom AS (
-                SELECT {", ".join([f"c.{name}" for name in non_geom_column_names])}, ST_AsMVTGeom(c.geom, b.wm_geom::box2d) AS geom
-                FROM candidates c, bounds_webmerc b
-            )
-            SELECT ST_AsMVT(mvtgeom, 'reprojectedfgb', 4096, 'geom', 'id') FROM mvtgeom
-            """
-
             # race between the tile fetch and client disconnect detection
             # note that proxies sometimes swallow these disconnection events
             async def watch_disconnect():
@@ -671,7 +635,7 @@ async def get_layer_mvt_tile(
                         return "disconnect"
 
             fetchval_task = asyncio.create_task(
-                postgis_conn.fetchval(mvt_query, z, x, y)
+                fetch_mvt_tile(layer, postgis_conn, z, x, y)
             )
             disconnect_task = asyncio.create_task(watch_disconnect())
 
