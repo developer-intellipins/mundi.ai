@@ -645,20 +645,19 @@ async def get_layer_mvt_tile(
             bounds_webmerc AS (
                 SELECT ST_TileEnvelope($1, $2, $3) AS wm_geom
             ),
-            bounds_native AS (
-                SELECT ST_Transform(wm_geom, (SELECT ST_SRID(geom) FROM ({layer.postgis_query}) LIMIT 1)) AS nat_geom,
-                       wm_geom::box2d AS b2d
-                FROM bounds_webmerc
+            transformed AS (
+                SELECT {", ".join([f"t.{name}" for name in non_geom_column_names])}, ST_Transform(t.geom, 3857) AS geom
+                FROM ({layer.postgis_query}) t
             ),
             candidates AS (
                 SELECT {", ".join([f"t.{name}" for name in non_geom_column_names])}, ST_MakeValid(t.geom) AS geom
-                FROM ({layer.postgis_query}) t, bounds_native b
-                WHERE t.geom && b.nat_geom
-                  AND ST_Intersects(t.geom, b.nat_geom)
+                FROM transformed t, bounds_webmerc b
+                WHERE t.geom && b.wm_geom
+                  AND ST_Intersects(t.geom, b.wm_geom)
             ),
             mvtgeom AS (
-                SELECT {", ".join([f"c.{name}" for name in non_geom_column_names])}, ST_AsMVTGeom(ST_Transform(c.geom, 3857), b.b2d) AS geom
-                FROM candidates c, bounds_native b
+                SELECT {", ".join([f"c.{name}" for name in non_geom_column_names])}, ST_AsMVTGeom(c.geom, b.wm_geom::box2d) AS geom
+                FROM candidates c, bounds_webmerc b
             )
             SELECT ST_AsMVT(mvtgeom, 'reprojectedfgb', 4096, 'geom', 'id') FROM mvtgeom
             """
@@ -709,18 +708,8 @@ async def get_layer_mvt_tile(
         )
 
     except asyncpg.exceptions.InternalServerError as e:
-        # Gracefully handle the specific projection-domain error
-        if "transform: Point outside of projection domain" in str(e):
-            return Response(
-                content=b"",
-                media_type="application/vnd.mapbox-vector-tile",
-                headers={
-                    "Access-Control-Allow-Origin": "*",
-                    "Cache-Control": "public, max-age=3600",
-                },
-            )
-        else:
-            raise e
+        # Re-raise any other internal server errors that aren't handled by the fallback
+        raise e
 
 
 @layer_router.get(
