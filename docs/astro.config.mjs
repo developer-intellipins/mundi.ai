@@ -5,6 +5,7 @@ import starlightLlmsTxt from 'starlight-llms-txt';
 import sitemap from '@astrojs/sitemap';
 import starlightOpenAPI, { openAPISidebarGroups } from 'starlight-openapi';
 import starlightLinksValidator from 'starlight-links-validator';
+import starlightThemeRapide from 'starlight-theme-rapide'
 
 // https://astro.build/config
 export default defineConfig({
@@ -77,7 +78,7 @@ You can try Mundi free at https://app.mundi.ai or self-host using Docker Compose
 						description: "Source code and contributions"
 					},
 					{
-						label: "Live Demo",
+						label: "Mundi Cloud",
 						url: "https://app.mundi.ai",
 						description: "Hosted cloud service"
 					},
@@ -92,13 +93,8 @@ You can try Mundi free at https://app.mundi.ai or self-host using Docker Compose
 					base: 'developer-api',
 					schema: './src/schema/openapi.json',
 					label: 'Developer API',
-					sidebar: {
-						operations: {
-							badges: true
-						}
-					}
 				},
-			]), starlightLinksValidator()],
+			]), starlightLinksValidator(), starlightThemeRapide()],
 			head: [
 				{
 					tag: 'script',
