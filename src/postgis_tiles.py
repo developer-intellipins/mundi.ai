@@ -15,13 +15,13 @@
 
 import asyncpg
 from fastapi import HTTPException, status
-from typing import List, Coroutine, Any
+from typing import List
 from src.database.models import MapLayer
 
 
-def fetch_mvt_tile(
+async def fetch_mvt_tile(
     layer: MapLayer, conn: asyncpg.Connection, z: int, x: int, y: int
-) -> Coroutine[Any, Any, bytes]:
+) -> bytes:
     # Check if layer is a PostGIS type
     if layer.type != "postgis":
         raise HTTPException(
@@ -58,5 +58,4 @@ def fetch_mvt_tile(
         SELECT ST_AsMVT(mvtgeom, 'reprojectedfgb', 4096, 'geom', 'id') FROM mvtgeom
         """
 
-    # coroutine
-    return conn.fetchval(mvt_query, z, x, y)
+    return await conn.fetchval(mvt_query, z, x, y)
