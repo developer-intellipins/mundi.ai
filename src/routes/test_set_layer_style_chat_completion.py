@@ -199,6 +199,11 @@ async def test_set_layer_style_via_chat_completion(
             assert msg6["status"] == "completed"
             assert msg6["updates"]["style_json"] is True
 
+            # Tool response message after styling completes
+            msg6_tool = websocket.receive_json()
+            assert msg6_tool["role"] == "tool"
+            assert msg6_tool["tool_response"]["status"] == "success"
+
             msg7 = websocket.receive_json()
             assert msg7["ephemeral"] is True
             assert msg7["action"] == "Kue is thinking..."

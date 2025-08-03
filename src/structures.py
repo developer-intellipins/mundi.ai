@@ -119,12 +119,14 @@ class SanitizedMessage(BaseModel):
     map_id: str
     created_at: datetime.datetime
     conversation_id: int
+    tool_response: Optional[SanitizedToolResponse] = None
 
 
 def convert_mundi_message_to_sanitized(
     cc_message: MundiChatCompletionMessage,
 ) -> SanitizedMessage:
-    assert cc_message.message_json["role"] in ["user", "assistant"]
+    role = cc_message.message_json["role"]
+    assert role in ["user", "assistant", "tool"]
 
     tool_calls = []
     if cc_message.message_json.get("tool_calls"):
@@ -134,14 +136,27 @@ def convert_mundi_message_to_sanitized(
                 convert_openai_tool_call_to_sanitized_tool_call(tool_call)
             )
 
+    tool_response = None
+    if role == "tool":
+        try:
+            content = json.loads(cc_message.message_json.get("content"))
+            # delicately detect errors... by assuming success
+            tool_response = SanitizedToolResponse(
+                id=cc_message.message_json["tool_call_id"],
+                status="error" if content["status"] == "error" else "success",
+            )
+        except (json.JSONDecodeError, KeyError):
+            pass
+
     return SanitizedMessage(
-        role=cc_message.message_json["role"],
-        content=cc_message.message_json["content"],
+        role=role,
+        content=cc_message.message_json["content"] if role != "tool" else None,
         has_tool_calls=bool(cc_message.message_json.get("tool_calls")),
         tool_calls=tool_calls,
         map_id=cc_message.map_id,
         created_at=cc_message.created_at,
         conversation_id=cc_message.conversation_id,
+        tool_response=tool_response,
     )
 
 
@@ -164,6 +179,11 @@ class SanitizedToolCall(BaseModel):
     ]
     code: CodeBlock | None
     table: dict | None
+
+
+class SanitizedToolResponse(BaseModel):
+    id: str
+    status: Literal["success", "error"]
 
 
 TC_ICON_MAP = {

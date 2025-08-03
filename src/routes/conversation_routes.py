@@ -155,7 +155,7 @@ async def get_conversation_messages(
             # Parse message_json when using raw asyncpg
             msg_dict["message_json"] = json.loads(msg_dict["message_json"])
             cc_message = MundiChatCompletionMessage(**msg_dict)
-            if cc_message.message_json["role"] in ["tool", "system"]:
+            if cc_message.message_json["role"] == "system":
                 continue
             sanitized_payload = convert_mundi_message_to_sanitized(cc_message)
             messages.append(sanitized_payload)

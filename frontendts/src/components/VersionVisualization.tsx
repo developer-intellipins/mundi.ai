@@ -24,7 +24,15 @@ import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { QgisIcon } from '@/lib/qgis';
-import { Conversation, EphemeralAction, MapNode, MapTreeResponse, SanitizedMessage, SanitizedToolCall } from '@/lib/types';
+import {
+  Conversation,
+  EphemeralAction,
+  MapNode,
+  MapTreeResponse,
+  SanitizedMessage,
+  SanitizedToolCall,
+  SanitizedToolResponse,
+} from '@/lib/types';
 import { formatShortRelativeTime } from '../lib/utils';
 
 function iconForToolCall(toolCall: SanitizedToolCall) {
@@ -55,12 +63,35 @@ function MessageItem({
   msgIndex,
   expandedToolCalls,
   setExpandedToolCalls,
+  toolResponses,
 }: {
   message: SanitizedMessage;
   msgIndex: number;
   expandedToolCalls: string[];
   setExpandedToolCalls: (toolCalls: string[]) => void;
+  toolResponses: SanitizedToolResponse[];
 }) {
+  // Create lookup table from toolCall.id to toolStatus
+  const toolStatusLookup =
+    message.tool_calls?.reduce(
+      (acc, toolCall) => {
+        const toolResponse = toolResponses.find((response) => response.id === toolCall.id);
+        acc[toolCall.id] = toolResponse?.status || 'pending';
+        return acc;
+      },
+      {} as Record<string, string>,
+    ) || {};
+
+  const toolColorLookup: Record<string, string> = {
+    success: 'text-muted-foreground',
+    error: 'text-red-400',
+  };
+
+  const toolHoverColorLookup: Record<string, string> = {
+    success: 'hover:text-gray-100',
+    error: 'hover:text-red-300',
+  };
+
   return (
     <>
       <div
@@ -76,7 +107,7 @@ function MessageItem({
           {message.tool_calls.map((toolCall) => (
             <div key={toolCall.id} className="space-y-1">
               <div
-                className={`flex justify-start gap-2 text-muted-foreground ${isExpandable(toolCall) ? 'cursor-pointer hover:text-white' : ''}`}
+                className={`flex justify-start gap-2 ${toolColorLookup[toolStatusLookup[toolCall.id]]} ${isExpandable(toolCall) ? `cursor-pointer ${toolHoverColorLookup[toolStatusLookup[toolCall.id]]}` : ''}`}
                 onClick={() => {
                   if (isExpandable(toolCall)) {
                     const isExpanded = expandedToolCalls.includes(toolCall.id);
@@ -87,6 +118,7 @@ function MessageItem({
                     }
                   }
                 }}
+                title={toolStatusLookup[toolCall.id] === 'error' ? 'Tool call failed' : 'Tool call succeeded'}
               >
                 <div>{iconForToolCall(toolCall)}</div>
                 <div>{toolCall.tagline}</div>
@@ -312,15 +344,23 @@ export default function VersionVisualization({
               <div className="flex">
                 {/* Left side - Messages */}
                 <div className="flex flex-col space-y-1 py-2 flex-4">
-                  {getMessagesForMap(node.map_id).map((msg, msgIndex) => (
-                    <MessageItem
-                      key={`message-${msgIndex}`}
-                      message={msg}
-                      msgIndex={msgIndex}
-                      expandedToolCalls={expandedToolCalls}
-                      setExpandedToolCalls={setExpandedToolCalls}
-                    />
-                  ))}
+                  {(() => {
+                    const messages = getMessagesForMap(node.map_id);
+                    const toolResponses = messages
+                      .filter((msg) => msg.role === 'tool' && msg.tool_response)
+                      .map((msg) => msg.tool_response!);
+
+                    return messages.map((msg, msgIndex) => (
+                      <MessageItem
+                        key={`message-${msgIndex}`}
+                        message={msg}
+                        msgIndex={msgIndex}
+                        expandedToolCalls={expandedToolCalls}
+                        setExpandedToolCalls={setExpandedToolCalls}
+                        toolResponses={toolResponses}
+                      />
+                    ));
+                  })()}
                 </div>
 
                 {/* Center - connecting line space */}

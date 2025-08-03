@@ -154,6 +154,11 @@ export interface SanitizedToolCall {
   table?: Record<string, string>;
 }
 
+export interface SanitizedToolResponse {
+  id: string;
+  status: 'success' | 'error';
+}
+
 export interface SanitizedMessage {
   role: string;
   content?: string;
@@ -162,6 +167,7 @@ export interface SanitizedMessage {
   map_id?: string; // Associates the message with a specific map version
   conversation_id?: number; // Associates the message with a specific conversation
   created_at?: string; // Timestamp from backend for proper ordering of messages
+  tool_response?: SanitizedToolResponse;
 }
 
 export interface MessagesListResponse {

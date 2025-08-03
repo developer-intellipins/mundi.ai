@@ -159,6 +159,12 @@ async def test_zoom_integration_with_real_openai(
             assert "Zooming to downtown Seattle" in msg6["action"]
             assert msg6["status"] == "completed"
 
+            # Tool response message after zoom action completes
+            msg6_tool = websocket.receive_json()
+            assert msg6_tool["role"] == "tool"
+            assert msg6_tool["tool_response"]["id"] == "call_1"
+            assert msg6_tool["tool_response"]["status"] == "success"
+
             # Message 7: Final thinking (start)
             msg7 = websocket.receive_json()
             assert msg7["ephemeral"]

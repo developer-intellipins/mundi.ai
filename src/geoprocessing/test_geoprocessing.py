@@ -230,6 +230,12 @@ async def test_chat_completions(
             assert msg["ephemeral"] and msg["action"] == "QGIS running native:buffer..."
             assert msg["status"] == "completed"
 
+            # Tool response message after tool execution completes
+            msg = websocket.receive_json()
+            assert msg["role"] == "tool"
+            assert msg["tool_response"]["id"] == "call_1"
+            assert msg["tool_response"]["status"] == "success"
+
             # Reach in for the tool call to actually check it worked.. its hard to tell later
             async with get_async_db_connection() as conn:
                 messages = await conn.fetch(
@@ -295,6 +301,12 @@ async def test_chat_completions(
             assert msg["ephemeral"] and msg["action"] == "Adding layer to map..."
             assert msg["status"] == "completed"
             assert msg["updates"]["style_json"]
+
+            # Tool response message after add layer to map completes
+            msg = websocket.receive_json()
+            assert msg["role"] == "tool"
+            assert msg["tool_response"]["id"] == "call_2"
+            assert msg["tool_response"]["status"] == "success"
 
             async with get_async_db_connection() as conn:
                 layers = await conn.fetch(
