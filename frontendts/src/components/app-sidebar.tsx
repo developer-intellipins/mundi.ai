@@ -103,7 +103,7 @@ export function AppSidebar({ projects }: { projects: ProjectState }) {
                       <SidebarMenuItem key={project.id}>
                         <SidebarMenuButton asChild>
                           <Link to={`/project/${project.id}`} className="flex items-center justify-between w-full">
-                            <span className="text-sm">{project.most_recent_version?.title || `Project ${project.id.slice(0, 8)}`}</span>
+                            <span className="text-sm">{project.title || `Untitled Map`}</span>
                             <span className="text-xs text-muted-foreground ml-2">
                               {formatRelativeTime(project.most_recent_version?.last_edited)}
                             </span>

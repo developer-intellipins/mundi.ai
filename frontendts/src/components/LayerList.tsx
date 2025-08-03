@@ -21,6 +21,7 @@ import { useNavigate } from 'react-router-dom';
 import { ReadyState } from 'react-use-websocket';
 import { toast } from 'sonner';
 import { AddRemoteDataSource } from '@/components/AddRemoteDataSource';
+import EditableTitle from '@/components/EditableTitle';
 import { LayerListItem } from '@/components/LayerListItem';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -258,7 +259,7 @@ const LayerList: React.FC<LayerListProps> = ({
                 </div>
               </TooltipContent>
             </Tooltip>
-            Map Layers
+            <EditableTitle projectId={currentMapData.project_id} title={project?.title} placeholder="Enter map title here" />
           </div>
           <React.Suspense fallback={null}>
             <Tooltip>

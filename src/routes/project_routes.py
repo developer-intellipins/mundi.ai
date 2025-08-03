@@ -101,6 +101,7 @@ class ProjectResponse(BaseModel):
     id: str
     owner_uuid: str
     link_accessible: bool
+    title: Optional[str] = None
     maps: Optional[List[str]] = None
     created_on: str
     most_recent_version: Optional[MostRecentVersion] = None
@@ -158,7 +159,7 @@ async def list_user_projects(
 
         projects_data = await conn.fetch(
             """
-            SELECT p.id, p.owner_uuid, p.link_accessible, p.maps, p.created_on, p.soft_deleted_at
+            SELECT p.id, p.owner_uuid, p.link_accessible, p.title, p.maps, p.created_on, p.soft_deleted_at
             FROM user_mundiai_projects p
             WHERE (
                 p.owner_uuid = $1 OR
@@ -268,6 +269,7 @@ async def list_user_projects(
                     id=project_data["id"],
                     owner_uuid=owner_uuid_str,
                     link_accessible=project_data["link_accessible"],
+                    title=project_data["title"],
                     maps=project_data["maps"],
                     created_on=created_on_str,
                     most_recent_version=most_recent_map_details,
@@ -380,6 +382,7 @@ async def get_project_route(
             id=project.id,
             owner_uuid=owner_uuid_str,
             link_accessible=project.link_accessible,
+            title=project.title,
             maps=project.maps,
             created_on=created_on_str,
             most_recent_version=most_recent_map_details,
@@ -388,7 +391,8 @@ async def get_project_route(
 
 
 class ProjectUpdateRequest(BaseModel):
-    link_accessible: bool
+    link_accessible: Optional[bool] = None
+    title: Optional[str] = None
 
 
 class ProjectUpdateResponse(BaseModel):
@@ -403,17 +407,33 @@ async def update_project(
     project: MundiProject = Depends(get_project),
 ):
     async with get_async_db_connection() as conn:
-        await conn.execute(
-            """
-            UPDATE user_mundiai_projects
-            SET link_accessible = $1
-            WHERE id = $2
-            """,
-            update_data.link_accessible,
-            project.id,
-        )
+        updated = False
 
-        return ProjectUpdateResponse(updated=True)
+        if update_data.link_accessible is not None:
+            await conn.execute(
+                """
+                UPDATE user_mundiai_projects
+                SET link_accessible = $1
+                WHERE id = $2
+                """,
+                update_data.link_accessible,
+                project.id,
+            )
+            updated = True
+
+        if update_data.title is not None:
+            await conn.execute(
+                """
+                UPDATE user_mundiai_projects
+                SET title = $1
+                WHERE id = $2
+                """,
+                update_data.title,
+                project.id,
+            )
+            updated = True
+
+        return ProjectUpdateResponse(updated=updated)
 
 
 class PostgresConnectionRequest(BaseModel):

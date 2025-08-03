@@ -207,12 +207,13 @@ async def create_map(
         await conn.execute(
             """
             INSERT INTO user_mundiai_projects
-            (id, owner_uuid, link_accessible, maps)
-            VALUES ($1, $2, FALSE, ARRAY[$3])
+            (id, owner_uuid, link_accessible, maps, title)
+            VALUES ($1, $2, FALSE, ARRAY[$3], $4)
             """,
             project_id,
             owner_id,
             map_id,
+            map_request.title,
         )
 
         # Then insert map with data including project_id and layer_ids

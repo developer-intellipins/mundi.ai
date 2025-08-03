@@ -329,7 +329,7 @@ export default function MapsList({ hideNewButton = false }: MapsListProps) {
                     <div className="relative h-full flex flex-col justify-between p-4 text-white">
                       {/* Header */}
                       <div>
-                        <h3 className="text-lg font-semibold line-clamp-2 mb-1">{project.most_recent_version?.title}</h3>
+                        <h3 className="text-lg font-semibold line-clamp-2 mb-1">{project.title}</h3>
                       </div>
 
                       {/* Footer */}
