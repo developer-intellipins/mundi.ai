@@ -755,10 +755,19 @@ async def get_project_social_preview(
     )
 
 
-@project_router.delete("/{project_id}", operation_id="delete_project")
+@project_router.delete(
+    "/{project_id}",
+    operation_id="delete_project",
+    summary="Delete a map project",
+    description="Marks a project as deleted (uses soft delete).",
+)
 async def delete_project(
     project: MundiProject = Depends(get_project),
 ):
+    """
+    Soft deletes a project. This project will no longer be listed in the user's
+    list of projects, but will appear in recently deleted projects.
+    """
     async with get_async_db_connection() as conn:
         # Soft delete the project
         updated_project = await conn.fetchrow(

@@ -23,7 +23,13 @@ app.openapi_url = "/openapi.json"
 
 
 def custom_openapi():
-    keep_names = {"create_map", "upload_layer_to_map", "set_layer_style"}
+    keep_names = {
+        "create_map",
+        "upload_layer_to_map",
+        "set_layer_style",
+        "render_map_to_png",
+        "delete_project",
+    }
     selected_routes = [
         r
         for r in app.router.routes

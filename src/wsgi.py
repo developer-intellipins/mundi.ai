@@ -107,7 +107,7 @@ app.include_router(
 app.include_router(
     project_routes.project_router,
     prefix="/api/projects",
-    tags=["Projects"],
+    tags=["Maps"],
 )
 app.include_router(
     basemap_router,

@@ -1663,7 +1663,11 @@ async def pull_bounds_from_map(map_id: str) -> tuple[float, float, float, float]
         )
 
 
-@router.get("/{map_id}/render.png", operation_id="render_map_to_png")
+@router.get(
+    "/{map_id}/render.png",
+    operation_id="render_map_to_png",
+    summary="Render a map as PNG",
+)
 async def render_map(
     request: Request,
     map: MundiMap = Depends(get_map),
@@ -1674,6 +1678,13 @@ async def render_map(
     base_map: BaseMapProvider = Depends(get_base_map_provider),
     session: Optional[UserContext] = Depends(verify_session_optional),
 ):
+    """Renders a map as a static PNG image, including layers and their symbology.
+
+    If no `bbox` is provided, the extent defaults to the smallest extent that contains
+    all layers with well-defined bounding boxes. `bbox` must be in the format `xmin,ymin,xmax,ymax` (EPSG:4326).
+
+    Width and height are in pixels.
+    """
     style_json = await get_map_style(
         request,
         map.id,
