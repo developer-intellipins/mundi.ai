@@ -297,16 +297,22 @@ async def test_chat_completions(
             assert msg["ephemeral"] and msg["action"] == "Adding layer to map..."
             assert msg["status"] == "active"
 
-            msg = websocket.receive_json()
-            assert msg["ephemeral"] and msg["action"] == "Adding layer to map..."
-            assert msg["status"] == "completed"
-            assert msg["updates"]["style_json"]
+            # handle racing
+            msg1 = websocket.receive_json()
+            msg2 = websocket.receive_json()
 
-            # Tool response message after add layer to map completes
-            msg = websocket.receive_json()
-            assert msg["role"] == "tool"
-            assert msg["tool_response"]["id"] == "call_2"
-            assert msg["tool_response"]["status"] == "success"
+            messages = [msg1, msg2]
+
+            ephemeral_msg = next((m for m in messages if m.get("ephemeral")), None)
+            assert ephemeral_msg is not None
+            assert ephemeral_msg["action"] == "Adding layer to map..."
+            assert ephemeral_msg["status"] == "completed"
+            assert ephemeral_msg["updates"]["style_json"]
+
+            tool_msg = next((m for m in messages if m.get("role") == "tool"), None)
+            assert tool_msg is not None
+            assert tool_msg["tool_response"]["id"] == "call_2"
+            assert tool_msg["tool_response"]["status"] == "success"
 
             async with get_async_db_connection() as conn:
                 layers = await conn.fetch(
